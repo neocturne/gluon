@@ -6,7 +6,7 @@ include ../gluon.mk
 
 define Package/gluon-mesh-vpn-core
   TITLE:=Basic support for connecting meshes via VPN tunnels
-  DEPENDS:=+gluon-core +gluon-wan-dnsmasq 
+  DEPENDS:=+gluon-core +gluon-nftables +gluon-wan-dnsmasq
   USERID:=:gluon-mesh-vpn=800
 endef
 

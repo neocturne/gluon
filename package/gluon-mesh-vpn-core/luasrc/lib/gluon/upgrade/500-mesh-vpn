@@ -19,16 +19,6 @@ uci:section('network', 'interface', 'mesh_vpn', {
 
 uci:save('network')
 
-
-uci:section('firewall', 'include', 'mesh_vpn_dns', {
-	type = 'nftables',
-	path = '/lib/gluon/mesh-vpn/nftables.rules',
-	position = 'chain-prepend',
-	chain = 'dstnat',
-})
-
-uci:save('firewall')
-
 -- Inital VPN setup
 if not uci:get('gluon', 'mesh_vpn') then
 	local enabled = site.mesh_vpn.enabled(false)
