@@ -79,6 +79,18 @@ local function evaluate_device(env, dev)
 		return dev.options.class == class
 	end
 
+	function funcs.include(path)
+		if string.sub(path, 1, 1) ~= '/' then
+			assert(
+				string.find(path, '/') == nil,
+				'incorrect use of include(): including files from subdirectories is unsupported')
+			path = env.GLUON_SITEDIR .. '/' .. path
+		end
+		local f = assert(loadfile(path))
+		setfenv(f, funcs)
+		return f()
+	end
+
 	-- Evaluate the feature definition files
 	setfenv(M.customization_file, funcs)
 	M.customization_file()
