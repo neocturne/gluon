@@ -202,7 +202,7 @@ end
 -- The parameter defines the ID to add to the MAC address
 
 local if_mac_offsets = {
-	wan = 0,
+	uplink = 0,
 	primary = 3,
 	mesh_other = 4,
 	mesh_vpn = 7,

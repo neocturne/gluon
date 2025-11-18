@@ -53,7 +53,7 @@ local radio_mac_offsets = {
 	client = 0,
 	mesh = 1,
 	owe = 2,
-	wan_radio = 3,
+	private = 3,
 }
 
 function M.get_wlan_mac(func, index, radio)

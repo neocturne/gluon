@@ -34,9 +34,9 @@ end
 if #mesh_interfaces_uplink > 0 then
 	local max_hop_penalty, _ = extract_ifaces(mesh_interfaces_uplink)
 	uci:section('network', 'interface', 'mesh_uplink', {
-		ifname = 'br-wan',
+		ifname = 'br-uplink',
 		proto = 'gluon_wired',
-		func = 'wan',
+		func = 'uplink',
 		hop_penalty = max_hop_penalty,
 		vxlan = site.mesh.vxlan(true),
 	})

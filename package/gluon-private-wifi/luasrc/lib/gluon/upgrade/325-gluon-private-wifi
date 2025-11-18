@@ -7,7 +7,7 @@ local util = require 'gluon.util'
 local function configure_private_wifi(radio, index)
 	local radio_name = radio['.name']
 	local suffix = radio_name:match('^radio(%d+)$')
-	local name   = "wan_" .. radio_name
+	local name   = "private_" .. radio_name
 
 	if not suffix then
 		return
@@ -18,16 +18,16 @@ local function configure_private_wifi(radio, index)
 	local key = uci:get('gluon', 'wireless', 'private_key')
 	local mfp = wireless.device_supports_mfp(uci) and uci:get('gluon', 'wireless', 'private_mfp')
 
-	local macaddr = wireless.get_wlan_mac('wan_radio', index, radio)
+	local macaddr = wireless.get_wlan_mac('private', index, radio)
 	uci:section('wireless', 'wifi-iface', name, {
 		device     = radio_name,
-		network    = 'wan',
+		network    = 'uplink',
 		mode       = 'ap',
 		encryption = encryption,
 		ssid       = ssid,
 		key        = key,
 		macaddr    = macaddr,
-		ifname     = 'wl-wan' .. suffix,
+		ifname     = 'private' .. suffix,
 	})
 
 	-- hostapd-mini won't start in case 802.11w is configured

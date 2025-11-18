@@ -4,8 +4,8 @@
 
 local uci = require("simple-uci").cursor()
 
-local wan = uci:get_all("network", "wan")
-local wan6 = uci:get_all("network", "wan6")
+local uplink = uci:get_all("network", "uplink")
+local uplink6 = uci:get_all("network", "uplink6")
 local dns_static = uci:get_first("gluon-wan-dnsmasq", "static")
 
 
@@ -17,21 +17,21 @@ local ipv4 = s:option(ListValue, "ipv4", translate("IPv4"))
 ipv4:value("dhcp", translate("Automatic (DHCP)"))
 ipv4:value("static", translate("Static"))
 ipv4:value("none", translate("Disabled"))
-ipv4.default = wan.proto
+ipv4.default = uplink.proto
 
 local ipv4_addr = s:option(Value, "ipv4_addr", translate("IP address"))
 ipv4_addr:depends(ipv4, "static")
-ipv4_addr.default = wan.ipaddr
+ipv4_addr.default = uplink.ipaddr
 ipv4_addr.datatype = "ip4addr"
 
 local ipv4_netmask = s:option(Value, "ipv4_netmask", translate("Netmask"))
 ipv4_netmask:depends(ipv4, "static")
-ipv4_netmask.default = wan.netmask or "255.255.255.0"
+ipv4_netmask.default = uplink.netmask or "255.255.255.0"
 ipv4_netmask.datatype = "ip4addr"
 
 local ipv4_gateway = s:option(Value, "ipv4_gateway", translate("Gateway"))
 ipv4_gateway:depends(ipv4, "static")
-ipv4_gateway.default = wan.gateway
+ipv4_gateway.default = uplink.gateway
 ipv4_gateway.datatype = "ip4addr"
 
 
@@ -41,16 +41,16 @@ local ipv6 = s:option(ListValue, "ipv6", translate("IPv6"))
 ipv6:value("dhcpv6", translate("Automatic (RA/DHCPv6)"))
 ipv6:value("static", translate("Static"))
 ipv6:value("none", translate("Disabled"))
-ipv6.default = wan6.proto
+ipv6.default = uplink6.proto
 
 local ipv6_addr = s:option(Value, "ipv6_addr", translate("IP address"))
 ipv6_addr:depends(ipv6, "static")
-ipv6_addr.default = wan6.ip6addr
+ipv6_addr.default = uplink6.ip6addr
 ipv6_addr.datatype = "ip6addr"
 
 local ipv6_gateway = s:option(Value, "ipv6_gateway", translate("Gateway"))
 ipv6_gateway:depends(ipv6, "static")
-ipv6_gateway.default = wan6.ip6gw
+ipv6_gateway.default = uplink6.ip6gw
 ipv6_gateway.datatype = "ip6addr"
 
 if dns_static then
@@ -149,24 +149,24 @@ uci:foreach("system", "gpio_switch", function(si)
 end)
 
 function f:write()
-	uci:set("network", "wan", "proto", ipv4.data)
+	uci:set("network", "uplink", "proto", ipv4.data)
 	if ipv4.data == "static" then
-		uci:set("network", "wan", "ipaddr", ipv4_addr.data)
-		uci:set("network", "wan", "netmask", ipv4_netmask.data)
-		uci:set("network", "wan", "gateway", ipv4_gateway.data)
+		uci:set("network", "uplink", "ipaddr", ipv4_addr.data)
+		uci:set("network", "uplink", "netmask", ipv4_netmask.data)
+		uci:set("network", "uplink", "gateway", ipv4_gateway.data)
 	else
-		uci:delete("network", "wan", "ipaddr")
-		uci:delete("network", "wan", "netmask")
-		uci:delete("network", "wan", "gateway")
+		uci:delete("network", "uplink", "ipaddr")
+		uci:delete("network", "uplink", "netmask")
+		uci:delete("network", "uplink", "gateway")
 	end
 
-	uci:set("network", "wan6", "proto", ipv6.data)
+	uci:set("network", "uplink6", "proto", ipv6.data)
 	if ipv6.data == "static" then
-		uci:set("network", "wan6", "ip6addr", ipv6_addr.data)
-		uci:set("network", "wan6", "ip6gw", ipv6_gateway.data)
+		uci:set("network", "uplink6", "ip6addr", ipv6_addr.data)
+		uci:set("network", "uplink6", "ip6gw", ipv6_gateway.data)
 	else
-		uci:delete("network", "wan6", "ip6addr")
-		uci:delete("network", "wan6", "ip6gw")
+		uci:delete("network", "uplink6", "ip6addr")
+		uci:delete("network", "uplink6", "ip6gw")
 	end
 
 	uci:commit('gluon')

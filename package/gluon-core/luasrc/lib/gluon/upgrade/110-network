@@ -18,8 +18,8 @@ local function get_network_mac(name)
 	return ifdata.macaddr
 end
 
-local wan = uci:get_all('network_gluon-old', 'wan') or {}
-local wan6 = uci:get_all('network_gluon-old', 'wan6') or {}
+local uplink = uci:get_all('network_gluon-old', 'uplink') or uci:get_all('network_gluon-old', 'wan') or {}
+local uplink6 = uci:get_all('network_gluon-old', 'uplink6') or uci:get_all('network_gluon-old', 'wan6') or {}
 
 uci:section('network', 'interface', 'loopback', {
 	ifname = 'lo',
@@ -28,18 +28,18 @@ uci:section('network', 'interface', 'loopback', {
 	netmask = '255.0.0.0',
 })
 
-local wan_proto = 'dhcp'
+local uplink_proto = 'dhcp'
 
-if sysconfig.gluon_version and wan.proto ~= nil then
+if sysconfig.gluon_version and uplink.proto ~= nil then
 	-- Only restore WAN proto in case this is an upgrade
-	wan_proto = wan.proto
+	uplink_proto = uplink.proto
 end
 
-uci:section('network', 'interface', 'wan', {
-	proto = wan_proto,
-	ipaddr = wan.ipaddr,
-	netmask = wan.netmask,
-	gateway = wan.gateway,
+uci:section('network', 'interface', 'uplink', {
+	proto = uplink_proto,
+	ipaddr = uplink.ipaddr,
+	netmask = uplink.netmask,
+	gateway = uplink.gateway,
 	macaddr = get_network_mac('wan'),
 	ifname = util.get_role_interfaces(uci, 'uplink'),
 	type = 'bridge',
@@ -49,23 +49,23 @@ uci:section('network', 'interface', 'wan', {
 	auto = true,
 })
 
-uci:section('network', 'interface', 'wan6', {
-	proto = wan6.proto or 'dhcpv6',
-	ip6addr = wan6.ip6addr,
-	ip6gw = wan6.ip6gw,
-	ifname = 'br-wan',
+uci:section('network', 'interface', 'uplink6', {
+	proto = uplink6.proto or 'dhcpv6',
+	ip6addr = uplink6.ip6addr,
+	ip6gw = uplink6.ip6gw,
+	ifname = 'br-uplink',
 	peerdns = false,
 	ip6table = 1,
 	sourcefilter = false,
 	reqprefix = 'no',
 })
 
-uci:section('network', 'rule6', 'wan6_lookup', {
+uci:section('network', 'rule6', 'uplink6_lookup', {
 	mark = '0x01/0x01',
 	lookup = 1,
 })
 
-uci:section('network', 'route6', 'wan6_unreachable', {
+uci:section('network', 'route6', 'uplink6_unreachable', {
 	type = 'unreachable',
 	interface = 'loopback',
 	target = '::/0',
