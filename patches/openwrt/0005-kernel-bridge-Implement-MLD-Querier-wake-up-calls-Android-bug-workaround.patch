@@ -25,13 +25,13 @@ Link: https://github.com/freifunk-gluon/gluon/issues/1832
 
 Signed-off-by: Linus Lüssing <linus.luessing@c0d3.blue>
 
-diff --git a/package/network/config/netifd/patches/0001-bridge-Add-multicast_wakeupcall-option.patch b/package/network/config/netifd/patches/0001-bridge-Add-multicast_wakeupcall-option.patch
+diff --git a/package/network/config/netifd/patches/0005-bridge-Add-multicast_wakeupcall-option.patch b/package/network/config/netifd/patches/0005-bridge-Add-multicast_wakeupcall-option.patch
 new file mode 100644
-index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8cc5e042ea
+index 0000000000000000000000000000000000000000..4d041697b6a81569fc67062abedd6852f94dc0f7
 --- /dev/null
-+++ b/package/network/config/netifd/patches/0001-bridge-Add-multicast_wakeupcall-option.patch
-@@ -0,0 +1,142 @@
-+From d23a49e6542dc068b12fbc7b6a4520f9fb3626f9 Mon Sep 17 00:00:00 2001
++++ b/package/network/config/netifd/patches/0005-bridge-Add-multicast_wakeupcall-option.patch
+@@ -0,0 +1,148 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 +From: =?UTF-8?q?Linus=20L=C3=BCssing?= <linus.luessing@c0d3.blue>
 +Date: Sun, 5 Jul 2020 23:33:51 +0200
 +Subject: [PATCH] bridge: Add multicast_wakeupcall option
@@ -70,9 +70,11 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + system-linux.c | 13 +++++++++++++
 + 3 files changed, 25 insertions(+)
 +
++diff --git a/device.c b/device.c
++index 06f52cc..6a524a3 100644
 +--- a/device.c
 ++++ b/device.c
-+@@ -49,6 +49,7 @@ static const struct blobmsg_policy dev_a
++@@ -49,6 +49,7 @@ static const struct blobmsg_policy dev_attrs[__DEV_ATTR_MAX] = {
 + 	[DEV_ATTR_NEIGHGCSTALETIME] = { .name = "neighgcstaletime", .type = BLOBMSG_TYPE_INT32 },
 + 	[DEV_ATTR_DADTRANSMITS] = { .name = "dadtransmits", .type = BLOBMSG_TYPE_INT32 },
 + 	[DEV_ATTR_MULTICAST_TO_UNICAST] = { .name = "multicast_to_unicast", .type = BLOBMSG_TYPE_BOOL },
@@ -80,7 +82,7 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + 	[DEV_ATTR_MULTICAST_ROUTER] = { .name = "multicast_router", .type = BLOBMSG_TYPE_INT32 },
 + 	[DEV_ATTR_MULTICAST_FAST_LEAVE] = { .name = "multicast_fast_leave", . type = BLOBMSG_TYPE_BOOL },
 + 	[DEV_ATTR_MULTICAST] = { .name ="multicast", .type = BLOBMSG_TYPE_BOOL },
-+@@ -275,6 +276,7 @@ device_merge_settings(struct device *dev
++@@ -283,6 +284,7 @@ device_merge_settings(struct device *dev, struct device_settings *n)
 + 	n->multicast = s->flags & DEV_OPT_MULTICAST ?
 + 		s->multicast : os->multicast;
 + 	n->multicast_to_unicast = s->multicast_to_unicast;
@@ -88,7 +90,7 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + 	n->multicast_router = s->multicast_router;
 + 	n->multicast_fast_leave = s->multicast_fast_leave;
 + 	n->learning = s->learning;
-+@@ -449,6 +451,11 @@ device_init_settings(struct device *dev,
++@@ -460,6 +462,11 @@ device_init_settings(struct device *dev, struct blob_attr **tb)
 + 		s->flags |= DEV_OPT_MULTICAST_TO_UNICAST;
 + 	}
 + 
@@ -100,7 +102,7 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + 	if ((cur = tb[DEV_ATTR_MULTICAST_ROUTER])) {
 + 		s->multicast_router = blobmsg_get_u32(cur);
 + 		if (s->multicast_router <= 2)
-+@@ -1372,6 +1379,8 @@ device_dump_status(struct blob_buf *b, s
++@@ -1410,6 +1417,8 @@ device_dump_status(struct blob_buf *b, struct device *dev)
 + 			blobmsg_add_u32(b, "dadtransmits", st.dadtransmits);
 + 		if (st.flags & DEV_OPT_MULTICAST_TO_UNICAST)
 + 			blobmsg_add_u8(b, "multicast_to_unicast", st.multicast_to_unicast);
@@ -109,6 +111,8 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + 		if (st.flags & DEV_OPT_MULTICAST_ROUTER)
 + 			blobmsg_add_u32(b, "multicast_router", st.multicast_router);
 + 		if (st.flags & DEV_OPT_MULTICAST_FAST_LEAVE)
++diff --git a/device.h b/device.h
++index bda204c..c78d736 100644
 +--- a/device.h
 ++++ b/device.h
 +@@ -44,6 +44,7 @@ enum {
@@ -119,7 +123,7 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + 	DEV_ATTR_MULTICAST_ROUTER,
 + 	DEV_ATTR_MULTICAST_FAST_LEAVE,
 + 	DEV_ATTR_MULTICAST,
-+@@ -144,6 +145,7 @@ enum {
++@@ -145,6 +146,7 @@ enum {
 + 	DEV_OPT_GRO			= (1ULL << 37),
 + 	DEV_OPT_MASTER			= (1ULL << 38),
 + 	DEV_OPT_EEE			= (1ULL << 39),
@@ -127,7 +131,7 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + };
 + 
 + /* events broadcasted to all users of a device */
-+@@ -205,6 +207,7 @@ struct device_settings {
++@@ -206,6 +208,7 @@ struct device_settings {
 + 	int neigh4locktime;
 + 	unsigned int dadtransmits;
 + 	bool multicast_to_unicast;
@@ -135,9 +139,11 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + 	unsigned int multicast_router;
 + 	bool multicast_fast_leave;
 + 	bool multicast;
++diff --git a/system-linux.c b/system-linux.c
++index 7205274..47683ea 100644
 +--- a/system-linux.c
 ++++ b/system-linux.c
-+@@ -536,6 +536,11 @@ static void system_bridge_set_multicast_
++@@ -542,6 +542,11 @@ static void system_bridge_set_multicast_to_unicast(struct device *dev, const cha
 + 	system_set_dev_sysfs("brport/multicast_to_unicast", dev->ifname, val);
 + }
 + 
@@ -149,7 +155,7 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + static void system_bridge_set_multicast_fast_leave(struct device *dev, const char *val)
 + {
 + 	system_set_dev_sysfs("brport/multicast_fast_leave", dev->ifname, val);
-+@@ -923,8 +928,10 @@ static char *system_get_bridge(const cha
++@@ -933,8 +938,10 @@ static char *system_get_bridge(const char *name, char *buf, int buflen)
 + static void
 + system_bridge_set_wireless(struct device *bridge, struct device *dev)
 + {
@@ -160,7 +166,7 @@ index 0000000000000000000000000000000000000000..077a563b6066cd1d3aee4b1e82328e8c
 + 
 + 	if (dev->settings.flags & DEV_OPT_MULTICAST_TO_UNICAST)
 + 		mcast_to_ucast = dev->settings.multicast_to_unicast;
-+@@ -939,6 +946,12 @@ system_bridge_set_wireless(struct device
++@@ -949,6 +956,12 @@ system_bridge_set_wireless(struct device *bridge, struct device *dev)
 + 	system_bridge_set_multicast_to_unicast(dev, mcast_to_ucast ? "1" : "0");
 + 	system_bridge_set_hairpin_mode(dev, hairpin ? "1" : "0");
 + 	system_bridge_set_proxyarp_wifi(dev, dev->wireless_proxyarp ? "1" : "0");

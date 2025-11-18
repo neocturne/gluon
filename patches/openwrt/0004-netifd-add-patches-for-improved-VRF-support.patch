@@ -1,0 +1,607 @@
+From: Nora Matthias Schiffer <neocturne@universe-factory.net>
+Date: Tue, 18 Nov 2025 19:14:28 +0100
+Subject: netifd: add patches for improved VRF support
+
+Signed-off-by: Nora Matthias Schiffer <neocturne@universe-factory.net>
+
+diff --git a/package/network/config/netifd/patches/0001-system-linux-use-struct-fib_rule_hdr-in-system_iprul.patch b/package/network/config/netifd/patches/0001-system-linux-use-struct-fib_rule_hdr-in-system_iprul.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..992b96007f5e5fae8a1f68296c079d354da9cb4a
+--- /dev/null
++++ b/package/network/config/netifd/patches/0001-system-linux-use-struct-fib_rule_hdr-in-system_iprul.patch
+@@ -0,0 +1,82 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Nora Matthias Schiffer <neocturne@universe-factory.net>
++Date: Sun, 16 Nov 2025 15:58:08 +0100
++Subject: [PATCH] system-linux: use struct fib_rule_hdr in system_iprule()
++
++struct fib_rule_hdr describes the header for ip rule messages more
++accurately. The fields rtm_protocol and rtm_scope are actually reserved
++(ignored by current kernels) and should not be set.
++
++Signed-off-by: Nora Matthias Schiffer <neocturne@universe-factory.net>
++---
++ system-linux.c | 32 +++++++++++++++-----------------
++ 1 file changed, 15 insertions(+), 17 deletions(-)
++
++diff --git a/system-linux.c b/system-linux.c
++index 29f9b4d..fcd9c0d 100644
++--- a/system-linux.c
+++++ b/system-linux.c
++@@ -3601,48 +3601,46 @@ static int system_iprule(struct iprule *rule, int cmd)
++ 	int alen = ((rule->flags & IPRULE_FAMILY) == IPRULE_INET4) ? 4 : 16;
++ 
++ 	struct nl_msg *msg;
++-	struct rtmsg rtm = {
++-		.rtm_family = (alen == 4) ? AF_INET : AF_INET6,
++-		.rtm_protocol = RTPROT_STATIC,
++-		.rtm_scope = RT_SCOPE_UNIVERSE,
++-		.rtm_table = RT_TABLE_UNSPEC,
++-		.rtm_type = RTN_UNSPEC,
++-		.rtm_flags = 0,
+++	struct fib_rule_hdr frh = {
+++		.family = (alen == 4) ? AF_INET : AF_INET6,
+++		.table = RT_TABLE_UNSPEC,
+++		.action = FR_ACT_UNSPEC,
+++		.flags = 0,
++ 	};
++ 
++ 	if (cmd == RTM_NEWRULE)
++-		rtm.rtm_type = RTN_UNICAST;
+++		frh.action = FR_ACT_TO_TBL;
++ 
++ 	if (rule->invert)
++-		rtm.rtm_flags |= FIB_RULE_INVERT;
+++		frh.flags |= FIB_RULE_INVERT;
++ 
++ 	if (rule->flags & IPRULE_SRC)
++-		rtm.rtm_src_len = rule->src_mask;
+++		frh.src_len = rule->src_mask;
++ 
++ 	if (rule->flags & IPRULE_DEST)
++-		rtm.rtm_dst_len = rule->dest_mask;
+++		frh.dst_len = rule->dest_mask;
++ 
++ 	if (rule->flags & IPRULE_TOS)
++-		rtm.rtm_tos = rule->tos;
+++		frh.tos = rule->tos;
++ 
++ 	if (rule->flags & IPRULE_LOOKUP) {
++ 		if (rule->lookup < 256)
++-			rtm.rtm_table = rule->lookup;
+++			frh.table = rule->lookup;
++ 	}
++ 
++ 	if (rule->flags & IPRULE_ACTION)
++-		rtm.rtm_type = rule->action;
+++		frh.action = rule->action;
++ 	else if (rule->flags & IPRULE_GOTO)
++-		rtm.rtm_type = FR_ACT_GOTO;
+++		frh.action = FR_ACT_GOTO;
++ 	else if (!(rule->flags & (IPRULE_LOOKUP | IPRULE_ACTION | IPRULE_GOTO)))
++-		rtm.rtm_type = FR_ACT_NOP;
+++		frh.action = FR_ACT_NOP;
++ 
++ 	msg = nlmsg_alloc_simple(cmd, NLM_F_REQUEST);
++ 
++ 	if (!msg)
++ 		return -1;
++ 
++-	nlmsg_append(msg, &rtm, sizeof(rtm), 0);
+++	nlmsg_append(msg, &frh, sizeof(frh), 0);
++ 
++ 	if (rule->flags & IPRULE_IN)
++ 		nla_put(msg, FRA_IFNAME, strlen(rule->in_dev) + 1, rule->in_dev);
+diff --git a/package/network/config/netifd/patches/0002-vrf-explicitly-create-l3mdev-lookup-rules.patch b/package/network/config/netifd/patches/0002-vrf-explicitly-create-l3mdev-lookup-rules.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..5e8dccc0ae33c561e6d37756a96cf6991b2e7723
+--- /dev/null
++++ b/package/network/config/netifd/patches/0002-vrf-explicitly-create-l3mdev-lookup-rules.patch
+@@ -0,0 +1,116 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Nora Matthias Schiffer <neocturne@universe-factory.net>
++Date: Sun, 16 Nov 2025 14:43:15 +0100
++Subject: [PATCH] vrf: explicitly create l3mdev lookup rules
++
++The kernel will automatically create a l3mdev rule when the first VRF
++interface is created, but a restart of netifd will flush this rule,
++breaking VRFs. Explicitly create the rule when VRFs are used.
++
++The rule is created with NLM_F_EXCL and RTPROT_KERNEL, so it is
++completely identical to the rule created by the kernel and no duplicate
++rules are generated.
++
++Signed-off-by: Nora Matthias Schiffer <neocturne@universe-factory.net>
++---
++ iprule.h       |  3 +++
++ system-linux.c | 17 +++++++++++++----
++ vrf.c          | 18 ++++++++++++++++++
++ 3 files changed, 34 insertions(+), 4 deletions(-)
++
++diff --git a/iprule.h b/iprule.h
++index 19d24fb..6faf1ab 100644
++--- a/iprule.h
+++++ b/iprule.h
++@@ -75,6 +75,9 @@ enum iprule_flags {
++ 
++ 	/* rule specifies dport */
++ 	IPRULE_DPORT		= (1 << 17),
+++
+++	/* rule performs l3mdev lookup */
+++	IPRULE_L3MDEV		= (1 << 18),
++ };
++ 
++ struct iprule {
++diff --git a/system-linux.c b/system-linux.c
++index fcd9c0d..a02ec60 100644
++--- a/system-linux.c
+++++ b/system-linux.c
++@@ -3607,6 +3607,7 @@ static int system_iprule(struct iprule *rule, int cmd)
++ 		.action = FR_ACT_UNSPEC,
++ 		.flags = 0,
++ 	};
+++	int nlm_flags = 0;
++ 
++ 	if (cmd == RTM_NEWRULE)
++ 		frh.action = FR_ACT_TO_TBL;
++@@ -3628,14 +3629,17 @@ static int system_iprule(struct iprule *rule, int cmd)
++ 			frh.table = rule->lookup;
++ 	}
++ 
++-	if (rule->flags & IPRULE_ACTION)
+++	if (rule->flags & IPRULE_ACTION) {
++ 		frh.action = rule->action;
++-	else if (rule->flags & IPRULE_GOTO)
+++	} else if (rule->flags & IPRULE_GOTO) {
++ 		frh.action = FR_ACT_GOTO;
++-	else if (!(rule->flags & (IPRULE_LOOKUP | IPRULE_ACTION | IPRULE_GOTO)))
+++	} else if (rule->flags & IPRULE_L3MDEV) {
+++		nlm_flags |= NLM_F_EXCL;
+++	} else if (!(rule->flags & (IPRULE_LOOKUP | IPRULE_ACTION | IPRULE_GOTO))) {
++ 		frh.action = FR_ACT_NOP;
+++	}
++ 
++-	msg = nlmsg_alloc_simple(cmd, NLM_F_REQUEST);
+++	msg = nlmsg_alloc_simple(cmd, NLM_F_REQUEST | nlm_flags);
++ 
++ 	if (!msg)
++ 		return -1;
++@@ -3706,6 +3710,11 @@ static int system_iprule(struct iprule *rule, int cmd)
++ 		nla_put(msg, FRA_DPORT_RANGE, sizeof(dportrange), &dportrange);
++ 	}
++ 
+++	if (rule->flags & IPRULE_L3MDEV) {
+++		nla_put_u8(msg, FRA_PROTOCOL, RTPROT_KERNEL);
+++		nla_put_u8(msg, FRA_L3MDEV, 1);
+++	}
+++
++ 	return system_rtnl_call(msg);
++ }
++ 
++diff --git a/vrf.c b/vrf.c
++index d27d5c3..459538b 100644
++--- a/vrf.c
+++++ b/vrf.c
++@@ -126,6 +126,21 @@ vrf_disable_member(struct vrf_member *vm, bool keep_dev)
++ 	return 0;
++ }
++ 
+++static void
+++vrf_add_iprule(int flags)
+++{
+++	struct iprule rule = {
+++		.flags = IPRULE_PRIORITY | IPRULE_L3MDEV | flags,
+++		.priority = 1000,
+++	};
+++
+++	/*
+++	 * Errors are ignored - this should only fail if an identical rule
+++	 * already exists
+++	 */
+++	system_add_iprule(&rule);
+++}
+++
++ static int
++ vrf_enable_interface(struct vrf_state *vst)
++ {
++@@ -134,6 +149,9 @@ vrf_enable_interface(struct vrf_state *vst)
++ 	if (vst->active)
++ 		return 0;
++ 
+++	vrf_add_iprule(IPRULE_INET4);
+++	vrf_add_iprule(IPRULE_INET6);
+++
++ 	ret = system_vrf_addvrf(&vst->dev, vst->table);
++ 	if (ret < 0)
++ 		return ret;
+diff --git a/package/network/config/netifd/patches/0003-iprule-add-global-config-for-local-lookup-priority.patch b/package/network/config/netifd/patches/0003-iprule-add-global-config-for-local-lookup-priority.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..1908e89d117923308c727249d1d3dbf78ccdbcc6
+--- /dev/null
++++ b/package/network/config/netifd/patches/0003-iprule-add-global-config-for-local-lookup-priority.patch
+@@ -0,0 +1,190 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Nora Matthias Schiffer <neocturne@universe-factory.net>
++Date: Sun, 16 Nov 2025 16:35:59 +0100
++Subject: [PATCH] iprule: add global config for local lookup priority
++
++With VRFs, a typical rule table may look like the following by default:
++
++    0:      from all lookup local
++    1000:   from all lookup [l3mdev-table]
++    32766:  from all lookup main
++    32767:  from all lookup default
++
++However, for VRF interfaces, local addresses are added to their
++respective VRF routing tables instead of the 'local' table. When the
++same address exists both on interfaces inside and outside of a VRF, this
++results in the interface outside the VRF to be preferred even from
++inside the VRF.
++
++This is a problem for the loopback addresses: For VRFs, the VRF interface
++itself is used instead of 'lo' by assigning 127.0.0.1 and ::1 to it, but
++this will only work if the local route from the VRF is preferred to the
++'lo' one for these addresses.
++
++To solve this, add a config option in the globals section allowing to
++change the priority of the 'lookup local' rule, for example creating
++the following rules:
++
++    1000:   from all lookup [l3mdev-table]
++    2000:   from all lookup local
++    32766:  from all lookup main
++    32767:  from all lookup default
++
++The default to assign priority 0 to the local lookup rule is left
++unchanged to avoid breaking existing setups.
++
++Signed-off-by: Nora Matthias Schiffer <neocturne@universe-factory.net>
++---
++ config.c       | 12 +++++++++++-
++ iprule.c       | 13 ++++++++++++-
++ iprule.h       |  2 ++
++ system-dummy.c |  2 +-
++ system-linux.c |  6 +++---
++ system.h       |  2 +-
++ 6 files changed, 30 insertions(+), 7 deletions(-)
++
++diff --git a/config.c b/config.c
++index 0ea39b5..f6a5da6 100644
++--- a/config.c
+++++ b/config.c
++@@ -548,6 +548,15 @@ config_init_globals(void)
++ 			uci_ctx, globals, "udp_l3mdev");
++ 	if (udp_l3mdev)
++ 		system_udp_l3mdev(!strcmp(udp_l3mdev, "1"));
+++
+++	const char *iprule_local_priority = uci_lookup_option_string(
+++			uci_ctx, globals, "iprule_local_priority");
+++	if (iprule_local_priority && iprule_local_priority[0]) {
+++		char *e;
+++		uint32_t priority = strtoul(iprule_local_priority, &e, 0);
+++		if (!*e)
+++			iprule_set_local_priority(priority);
+++	}
++ }
++ 
++ static void
++@@ -890,6 +899,8 @@ config_init_all(void)
++ 		ret = -1;
++ 	}
++ 
+++	config_init_globals();
+++
++ 	config_init_board();
++ 
++ 	vlist_update(&interfaces);
++@@ -902,7 +913,6 @@ config_init_all(void)
++ 	config_init_interfaces();
++ 	config_init_ip();
++ 	config_init_rules();
++-	config_init_globals();
++ 	config_init_wireless();
++ 
++ 	config_init = false;
++diff --git a/iprule.c b/iprule.c
++index c2009c8..fddde98 100644
++--- a/iprule.c
+++++ b/iprule.c
++@@ -30,6 +30,7 @@
++ struct vlist_tree iprules;
++ static bool iprules_flushed = false;
++ static unsigned int iprules_counter[2];
+++static uint32_t local_priority = 0;
++ 
++ enum {
++ 	RULE_INTERFACE_IN,
++@@ -203,6 +204,16 @@ struct interface_user generic_listener = {
++ 	.cb = generic_interface_cb
++ };
++ 
+++void iprule_set_local_priority(uint32_t prio)
+++{
+++	local_priority = prio;
+++}
+++
+++uint32_t iprule_get_local_priority(void)
+++{
+++	return local_priority;
+++}
+++
++ void
++ iprule_add(struct blob_attr *attr, bool v6)
++ {
++@@ -358,7 +369,7 @@ void
++ iprule_update_start(void)
++ {
++ 	if (!iprules_flushed) {
++-		system_flush_iprules();
+++		system_flush_iprules(local_priority);
++ 		iprules_flushed = true;
++ 	}
++ 
++diff --git a/iprule.h b/iprule.h
++index 6faf1ab..9f893cb 100644
++--- a/iprule.h
+++++ b/iprule.h
++@@ -131,6 +131,8 @@ struct iprule {
++ extern struct vlist_tree iprules;
++ extern const struct uci_blob_param_list rule_attr_list;
++ 
+++void iprule_set_local_priority(uint32_t prio);
+++uint32_t iprule_get_local_priority(void);
++ void iprule_add(struct blob_attr *attr, bool v6);
++ void iprule_update_start(void);
++ void iprule_update_complete(void);
++diff --git a/system-dummy.c b/system-dummy.c
++index c698361..cb48eec 100644
++--- a/system-dummy.c
+++++ b/system-dummy.c
++@@ -318,7 +318,7 @@ int system_del_iprule(struct iprule *rule)
++ 	return 0;
++ }
++ 
++-int system_flush_iprules(void)
+++int system_flush_iprules(uint32_t local_priority)
++ {
++ 	return 0;
++ }
++diff --git a/system-linux.c b/system-linux.c
++index a02ec60..7205274 100644
++--- a/system-linux.c
+++++ b/system-linux.c
++@@ -3728,7 +3728,7 @@ int system_del_iprule(struct iprule *rule)
++ 	return system_iprule(rule, RTM_DELRULE);
++ }
++ 
++-int system_flush_iprules(void)
+++int system_flush_iprules(uint32_t local_priority)
++ {
++ 	int rv = 0;
++ 	struct iprule rule;
++@@ -3741,7 +3741,7 @@ int system_flush_iprules(void)
++ 
++ 	rule.flags = IPRULE_INET4 | IPRULE_PRIORITY | IPRULE_LOOKUP;
++ 
++-	rule.priority = 0;
+++	rule.priority = local_priority;
++ 	rule.lookup = RT_TABLE_LOCAL;
++ 	rv |= system_iprule(&rule, RTM_NEWRULE);
++ 
++@@ -3756,7 +3756,7 @@ int system_flush_iprules(void)
++ 
++ 	rule.flags = IPRULE_INET6 | IPRULE_PRIORITY | IPRULE_LOOKUP;
++ 
++-	rule.priority = 0;
+++	rule.priority = local_priority;
++ 	rule.lookup = RT_TABLE_LOCAL;
++ 	rv |= system_iprule(&rule, RTM_NEWRULE);
++ 
++diff --git a/system.h b/system.h
++index 084ca96..8b32279 100644
++--- a/system.h
+++++ b/system.h
++@@ -309,7 +309,7 @@ int system_add_ip_tunnel(const struct device *dev, struct blob_attr *attr);
++ 
++ int system_add_iprule(struct iprule *rule);
++ int system_del_iprule(struct iprule *rule);
++-int system_flush_iprules(void);
+++int system_flush_iprules(uint32_t local_priority);
++ 
++ bool system_resolve_iprule_ipproto(const char *name, unsigned int *id);
++ bool system_resolve_iprule_action(const char *action, unsigned int *id);
+diff --git a/package/network/config/netifd/patches/0004-interface-add-policy_rules-option.patch b/package/network/config/netifd/patches/0004-interface-add-policy_rules-option.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..b2ce9119e4fc02024ab90f48105f24d9c96cdcbc
+--- /dev/null
++++ b/package/network/config/netifd/patches/0004-interface-add-policy_rules-option.patch
+@@ -0,0 +1,189 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Nora Matthias Schiffer <neocturne@universe-factory.net>
++Date: Sun, 16 Nov 2025 19:54:01 +0100
++Subject: [PATCH] interface: add 'policy_rules' option
++
++Add a new option 'policy_rules' that can be set to 0 to disable implicit
++generation of policy routing rules for interfaces with ip4table/ip6table
++setting. This can be useful when multiple routing tables are used for
++isolation, for example with VRFs.
++
++Signed-off-by: Nora Matthias Schiffer <neocturne@universe-factory.net>
++---
++ interface-ip.c | 50 ++++++++++++++++++++++++++++++--------------------
++ interface.c    |  6 ++++++
++ interface.h    |  1 +
++ ubus.c         |  1 +
++ 4 files changed, 38 insertions(+), 20 deletions(-)
++
++diff --git a/interface-ip.c b/interface-ip.c
++index 7e60f64..682a5a9 100644
++--- a/interface-ip.c
+++++ b/interface-ip.c
++@@ -707,7 +707,7 @@ interface_update_proto_addr(struct vlist_tree *tree,
++ 			 * only the network-rule will cause packets to be routed through the
++ 			 * first matching network (source IP matches both masks)
++ 			 */
++-			if (a_old->policy_table)
+++			if (a_old->policy_table && !iface->no_policy_rules)
++ 				interface_add_addr_rules(a_old, false);
++ 
++ 			if (!(a_old->flags & DEVADDR_EXTERNAL)) {
++@@ -773,7 +773,7 @@ interface_update_proto_addr(struct vlist_tree *tree,
++ 					system_add_route(NULL, &route);
++ 				}
++ 
++-				if (a_new->policy_table)
+++				if (a_new->policy_table && !iface->no_policy_rules)
++ 					interface_add_addr_rules(a_new, true);
++ 			}
++ 		}
++@@ -995,17 +995,24 @@ interface_set_prefix_address(struct device_prefix_assignment *assignment,
++ 				addr.valid_until = now + 7200;
++ 		}
++ 
++-		if (iface->ip6table)
++-			set_ip_source_policy(false, true, IPRULE_PRIORITY_ADDR_MASK, &addr.addr,
++-					addr.mask < 64 ? 64 : addr.mask, iface->ip6table, NULL, NULL, false);
++-
++-		if (prefix->iface) {
++-			if (prefix->iface->ip6table)
++-				set_ip_source_policy(false, true, IPRULE_PRIORITY_NW, &addr.addr,
++-						addr.mask, prefix->iface->ip6table, iface, NULL, true);
+++		if (!iface->no_policy_rules) {
+++			if (iface->ip6table)
+++				set_ip_source_policy(false, true,
+++						IPRULE_PRIORITY_ADDR_MASK, &addr.addr,
+++						addr.mask < 64 ? 64 : addr.mask,
+++						iface->ip6table, NULL, NULL, false);
++ 
++-			set_ip_source_policy(false, true, IPRULE_PRIORITY_REJECT, &addr.addr,
++-							addr.mask, 0, iface, "unreachable", true);
+++			if (prefix->iface) {
+++				if (prefix->iface->ip6table)
+++					set_ip_source_policy(false, true, IPRULE_PRIORITY_NW,
+++							&addr.addr, addr.mask,
+++							prefix->iface->ip6table,
+++							iface, NULL, true);
+++
+++				set_ip_source_policy(false, true, IPRULE_PRIORITY_REJECT,
+++						&addr.addr, addr.mask, 0, iface,
+++						"unreachable", true);
+++			}
++ 		}
++ 
++ 		clear_if_addr(&route.addr, route.mask);
++@@ -1034,7 +1041,7 @@ interface_set_prefix_address(struct device_prefix_assignment *assignment,
++ 		if (system_add_address(l3_downlink, &addr))
++ 			return;
++ 
++-		if (!assignment->enabled) {
+++		if (!assignment->enabled && !iface->no_policy_rules) {
++ 			if (iface->ip6table)
++ 				set_ip_source_policy(true, true, IPRULE_PRIORITY_ADDR_MASK, &addr.addr,
++ 						addr.mask < 64 ? 64 : addr.mask, iface->ip6table, NULL, NULL, false);
++@@ -1700,7 +1707,7 @@ void interface_ip_set_enabled(struct interface_ip_settings *ip, bool enabled)
++ 				system_add_route(NULL, &route);
++ 			}
++ 
++-			if (addr->policy_table)
+++			if (addr->policy_table && !iface->no_policy_rules)
++ 				interface_add_addr_rules(addr, true);
++ 		} else {
++ 			interface_handle_subnet_route(iface, addr, false);
++@@ -1721,7 +1728,7 @@ void interface_ip_set_enabled(struct interface_ip_settings *ip, bool enabled)
++ 				system_del_route(NULL, &route);
++ 			}
++ 
++-			if (addr->policy_table)
+++			if (addr->policy_table && !iface->no_policy_rules)
++ 				interface_add_addr_rules(addr, false);
++ 		}
++ 		addr->enabled = enabled;
++@@ -1753,16 +1760,19 @@ void interface_ip_set_enabled(struct interface_ip_settings *ip, bool enabled)
++ 			if (!strcmp(a->name, ip->iface->name))
++ 				interface_set_prefix_address(a, c, ip->iface, enabled);
++ 
++-	if (ip->iface->policy_rules_set != enabled &&
+++	bool policy_rules_enabled = enabled && !iface->no_policy_rules;
+++
+++	if (ip->iface->policy_rules_set != policy_rules_enabled &&
++ 	    ip->iface->l3_dev.dev) {
++ 		if (ip->iface->l3_dev.dev->settings.ipv6) {
++-			set_ip_lo_policy(enabled, true, ip->iface);
++-			set_ip_source_policy(enabled, true, IPRULE_PRIORITY_REJECT + ip->iface->l3_dev.dev->ifindex,
+++			set_ip_lo_policy(policy_rules_enabled, true, ip->iface);
+++			set_ip_source_policy(policy_rules_enabled, true,
+++					     IPRULE_PRIORITY_REJECT + ip->iface->l3_dev.dev->ifindex,
++ 					     NULL, 0, 0, ip->iface, "failed_policy", true);
++ 		}
++-		set_ip_lo_policy(enabled, false, ip->iface);
+++		set_ip_lo_policy(policy_rules_enabled, false, ip->iface);
++ 
++-		ip->iface->policy_rules_set = enabled;
+++		ip->iface->policy_rules_set = policy_rules_enabled;
++ 	}
++ }
++ 
++diff --git a/interface.c b/interface.c
++index 60b1807..6a2261c 100644
++--- a/interface.c
+++++ b/interface.c
++@@ -52,6 +52,7 @@ enum {
++ 	IFACE_ATTR_IP6HINT,
++ 	IFACE_ATTR_IP4TABLE,
++ 	IFACE_ATTR_IP6TABLE,
+++	IFACE_ATTR_POLICY_RULES,
++ 	IFACE_ATTR_IP6CLASS,
++ 	IFACE_ATTR_DELEGATE,
++ 	IFACE_ATTR_IP6IFACEID,
++@@ -83,6 +84,7 @@ static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
++ 	[IFACE_ATTR_IP6HINT] = { .name = "ip6hint", .type = BLOBMSG_TYPE_STRING },
++ 	[IFACE_ATTR_IP4TABLE] = { .name = "ip4table", .type = BLOBMSG_TYPE_STRING },
++ 	[IFACE_ATTR_IP6TABLE] = { .name = "ip6table", .type = BLOBMSG_TYPE_STRING },
+++	[IFACE_ATTR_POLICY_RULES] = { .name = "policy_rules", .type = BLOBMSG_TYPE_BOOL },
++ 	[IFACE_ATTR_IP6CLASS] = { .name = "ip6class", .type = BLOBMSG_TYPE_ARRAY },
++ 	[IFACE_ATTR_DELEGATE] = { .name = "delegate", .type = BLOBMSG_TYPE_BOOL },
++ 	[IFACE_ATTR_IP6IFACEID] = { .name = "ip6ifaceid", .type = BLOBMSG_TYPE_STRING },
++@@ -923,6 +925,9 @@ interface_alloc(const char *name, struct blob_attr *config, bool dynamic)
++ 			D(INTERFACE, "Failed to resolve routing table: %s", (char *) blobmsg_data(cur));
++ 	}
++ 
+++	iface->no_policy_rules =
+++		!blobmsg_get_bool_default(tb[IFACE_ATTR_POLICY_RULES], true);
+++
++ 	iface->proto_ip.no_delegation = !blobmsg_get_bool_default(tb[IFACE_ATTR_DELEGATE], true);
++ 
++ 	iface->config_autostart = iface->autostart;
++@@ -1368,6 +1373,7 @@ interface_change_config(struct interface *if_old, struct interface *if_new)
++ 	UPDATE(proto_ip.no_defaultroute, reload_ip);
++ 	UPDATE(ip4table, reload_ip);
++ 	UPDATE(ip6table, reload_ip);
+++	UPDATE(no_policy_rules, reload_ip);
++ 	interface_merge_assignment_data(if_old, if_new);
++ 
++ #undef UPDATE
++diff --git a/interface.h b/interface.h
++index c12a266..b4067b1 100644
++--- a/interface.h
+++++ b/interface.h
++@@ -122,6 +122,7 @@ struct interface {
++ 	bool link_state;
++ 	bool force_link;
++ 	bool dynamic;
+++	bool no_policy_rules;
++ 	bool policy_rules_set;
++ 	bool link_up_event;
++ 	bool renew;
++diff --git a/ubus.c b/ubus.c
++index 5ab1884..9e67a50 100644
++--- a/ubus.c
+++++ b/ubus.c
++@@ -861,6 +861,7 @@ netifd_dump_status(struct interface *iface)
++ 			blobmsg_add_u32(&b, "ip4table", iface->ip4table);
++ 		if (iface->ip6table)
++ 			blobmsg_add_u32(&b, "ip6table", iface->ip6table);
+++		blobmsg_add_u8(&b, "policy_rules", !iface->no_policy_rules);
++ 		blobmsg_add_u32(&b, "metric", iface->metric);
++ 		blobmsg_add_u32(&b, "dns_metric", iface->dns_metric);
++ 		blobmsg_add_u8(&b, "delegation", !iface->proto_ip.no_delegation);
