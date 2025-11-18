@@ -14,6 +14,7 @@ local function configure_wan(zone)
 	uci:set('firewall', zone['.name'], 'conntrack', true)
 
 	uci:set('firewall', zone['.name'], 'network', {
+		'vrf_uplink',
 		'uplink',
 		'uplink6',
 		'cellular',
@@ -39,6 +40,25 @@ uci:section('firewall', 'rule', 'wan_mld', {
 	proto = 'icmp',
 	src_ip = 'fe80::/10',
 	icmp_type = { '130/0', '131/0', '132/0', '143/0', },
+	family = 'ipv6',
+	target = 'ACCEPT',
+})
+
+-- VRF support
+uci:section('firewall', 'rule', 'uplink_loopback', {
+	name = 'Allow-uplink-loopback-IPv4',
+	dest = 'wan',
+	src_ip = '127.0.0.0/8',
+	dest_ip = '127.0.0.0/8',
+	family = 'ipv4',
+	target = 'ACCEPT',
+})
+
+uci:section('firewall', 'rule', 'uplink_loopback6', {
+	name = 'Allow-uplink-loopback-IPv6',
+	dest = 'wan',
+	src_ip = '::1/128',
+	dest_ip = '::1/128',
 	family = 'ipv6',
 	target = 'ACCEPT',
 })

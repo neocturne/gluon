@@ -21,6 +21,12 @@ end
 local uplink = uci:get_all('network_gluon-old', 'uplink') or uci:get_all('network_gluon-old', 'wan') or {}
 local uplink6 = uci:get_all('network_gluon-old', 'uplink6') or uci:get_all('network_gluon-old', 'wan6') or {}
 
+uci:section('network', 'globals', 'globals', {
+	tcp_l3mdev = true,
+	udp_l3mdev = true,
+	iprule_local_priority = 2000,
+})
+
 uci:section('network', 'interface', 'loopback', {
 	ifname = 'lo',
 	proto = 'static',
@@ -46,6 +52,8 @@ uci:section('network', 'interface', 'uplink', {
 	igmp_snooping = true,
 	multicast_querier = false,
 	peerdns = false,
+	ip4table = 1,
+	policy_rules = false,
 	auto = true,
 })
 
@@ -56,8 +64,14 @@ uci:section('network', 'interface', 'uplink6', {
 	ifname = 'br-uplink',
 	peerdns = false,
 	ip6table = 1,
+	policy_rules = false,
 	sourcefilter = false,
 	reqprefix = 'no',
+})
+
+uci:section('network', 'rule', 'uplink_lookup', {
+	mark = '0x01/0x01',
+	lookup = 1,
 })
 
 uci:section('network', 'rule6', 'uplink6_lookup', {
@@ -65,13 +79,37 @@ uci:section('network', 'rule6', 'uplink6_lookup', {
 	lookup = 1,
 })
 
+uci:section('network', 'route', 'uplink_unreachable', {
+	type = 'unreachable',
+	interface = 'vrf_uplink',
+	target = '0.0.0.0/0',
+	gateway = '0.0.0.0',
+	table = 1,
+	metric = 4278198272,
+})
+
 uci:section('network', 'route6', 'uplink6_unreachable', {
 	type = 'unreachable',
-	interface = 'loopback',
+	interface = 'vrf_uplink',
 	target = '::/0',
 	gateway = '::',
 	table = 1,
-	metric = 65535,
+	metric = 4278198272,
+})
+
+uci:section('network', 'device', nil, {
+	type = 'vrf',
+	name = 'vrf-uplink',
+	table = 1,
+	mtu = 1500,
+	ports = {'br-uplink', 'wwan0'},
+})
+
+uci:section('network', 'interface', 'vrf_uplink', {
+	device = 'vrf-uplink',
+	proto = 'static',
+	ipaddr = '127.0.0.1/8',
+	ip6addr = '::1/128',
 })
 
 uci:save('network')
