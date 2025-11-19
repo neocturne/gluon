@@ -1,2 +1,2 @@
 #!/bin/sh
-/etc/init.d/fastd stop
+/etc/init.d/gluon-fastd stop

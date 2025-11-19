@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+
+# shellcheck disable=SC1091,SC2154
+
+. "${IPKG_INSTROOT}/etc/init.d/fastd"
+
+FASTD_COMMAND=/lib/gluon/mesh-vpn/fastd/gluon-fastd
+
+section_enabled() {
+	config_get_bool enabled "$1" 'gluon_enabled' 0
+	[ "$enabled" -gt 0 ]
+}

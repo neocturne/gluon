@@ -43,9 +43,9 @@ else
 	methods = site.mesh_vpn.fastd.methods()
 end
 
-
 uci:section('fastd', 'fastd', 'mesh_vpn', {
-	group = 'gluon-mesh-vpn',
+	-- gluon_enabled option for gluon-fastd initscript set by VPN handler
+	enabled = false,
 	syslog_level = syslog_level,
 	secret = secret,
 	interface = vpn_core.get_interface(),
@@ -58,6 +58,7 @@ uci:section('fastd', 'fastd', 'mesh_vpn', {
 	offload_l2tp = false,
 	status_socket = '/var/run/fastd.mesh_vpn.socket',
 })
+uci:delete('fastd', 'mesh_vpn', 'group')
 uci:delete('fastd', 'mesh_vpn', 'peer_limit')
 
 -- L2TP offload support
@@ -105,7 +106,7 @@ local function add_peer(group, name, config)
 		return
 	end
 	uci:section('fastd', 'peer', uci_name, {
-		enabled = true,
+		gluon_enabled = true,
 		net = 'mesh_vpn',
 		group = group,
 		interface = 'mesh-vpn',
@@ -116,7 +117,7 @@ end
 
 local function add_group(name, config, parent)
 	uci:section('fastd', 'peer_group', name, {
-		enabled = true,
+		gluon_enabled = true,
 		net = 'mesh_vpn',
 		parent = parent,
 		peer_limit = config.limit,

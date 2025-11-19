@@ -48,8 +48,7 @@ proto_gluon_wireguard_setup() {
 	json_init
 	json_add_string name "${ifname}_peerselector"
 	json_add_string ifname "$ifname"
-	json_add_string proto 'wgpeerselector'
-	json_add_string unix_group 'gluon-mesh-vpn'
+	json_add_string proto 'gluon_wgpeerselector'
 	json_close_object
 	ubus call network add_dynamic "$(json_dump)"
 

@@ -9,7 +9,7 @@ local unistd = require 'posix.unistd'
 local M = {}
 
 function M.public_key()
-	local key = util.trim(util.exec('/etc/init.d/fastd show_key mesh_vpn'))
+	local key = util.trim(util.exec('/etc/init.d/gluon-fastd show_key mesh_vpn'))
 
 	if key == '' then
 		key = nil
@@ -19,7 +19,7 @@ function M.public_key()
 end
 
 function M.enable(val)
-	uci:set('fastd', 'mesh_vpn', 'enabled', val)
+	uci:set('fastd', 'mesh_vpn', 'gluon_enabled', val)
 	uci:save('fastd')
 end
 

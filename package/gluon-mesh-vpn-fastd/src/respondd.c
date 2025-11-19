@@ -52,7 +52,7 @@ static struct json_object * get_fastd_version(void) {
 }
 
 static struct json_object * get_fastd_public_key(void) {
-	FILE *f = popen("/etc/init.d/fastd show_key mesh_vpn", "r");
+	FILE *f = popen("/etc/init.d/gluon-fastd show_key mesh_vpn", "r");
 	if (!f)
 		return NULL;
 
@@ -111,7 +111,7 @@ static struct json_object * get_fastd(void) {
 	ctx->flags &= ~UCI_FLAG_STRICT;
 
 	struct uci_package *p;
-	if (uci_load(ctx, "fastd", &p))
+	if (uci_load(ctx, "gluon", &p))
 		goto disabled;
 
 	struct uci_section *s = uci_lookup_section(ctx, p, "mesh_vpn");
