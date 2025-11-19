@@ -25,6 +25,24 @@ local function configure_wan(zone)
 end
 uci:foreach('firewall', 'zone', configure_wan)
 
+uci:section('firewall', 'rule', 'wan_igmp', {
+	name = 'Allow-IGMP',
+	src = 'wan',
+	proto = 'igmp',
+	family = 'ipv4',
+	target = 'ACCEPT',
+})
+
+uci:section('firewall', 'rule', 'wan_mld', {
+	name = 'Allow-MLD',
+	src = 'wan',
+	proto = 'icmp',
+	src_ip = 'fe80::/10',
+	icmp_type = { '130/0', '131/0', '132/0', '143/0', },
+	family = 'ipv6',
+	target = 'ACCEPT',
+})
+
 for _, zone in ipairs({'mesh', 'loc_client', 'wired_mesh'}) do
 	-- Other packages assign interfaces to these zones
 	uci:section('firewall', 'zone', zone, {
