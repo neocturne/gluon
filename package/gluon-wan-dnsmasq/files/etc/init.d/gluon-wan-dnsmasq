@@ -13,27 +13,26 @@ start_service() {
 	touch "$RESOLV_CONF"
 
 	procd_open_instance
-	procd_set_param command /usr/sbin/dnsmasq \
+	procd_set_param command /usr/bin/gluon-uplink \
+		/usr/sbin/dnsmasq \
 		--user=dnsmasq \
 		--group=dnsmasq \
-		--interface=lo \
+		--interface=vrf-uplink \
+		--bind-interfaces \
 		--port=54 \
 		--no-hosts \
 		--keep-in-foreground \
 		--pid-file=/var/run/dnsmasq/gluon-wan-dnsmasq.pid \
 		--cache-size=0 \
-		--enable-ubus=gluon-wan-dnsmasq \
 		--resolv-file="$RESOLV_CONF"
-	# --enable-ubus must be set as a workaround to avoid dnsmasq dropping
-	# CAP_NET_RAW, which would break libpacketmark
-	procd_set_param env LD_PRELOAD=libpacketmark.so LIBPACKETMARK_MARK=1
 	procd_set_param respawn 60 5 5
 
-	procd_add_jail gluon-wan-dnsmasq log
+	procd_add_jail gluon-wan-dnsmasq log procfs
 	procd_add_jail_mount "$RESOLV_CONF_DIR"
-	procd_add_jail_mount /usr/lib/libpacketmark.so
 	procd_add_jail_mount /etc/passwd /etc/group /etc/TZ
+	procd_add_jail_mount /usr/sbin/dnsmasq
 	procd_add_jail_mount_rw /var/run/dnsmasq/
+	procd_add_jail_mount_rw /sys/fs/cgroup/
 
 	procd_close_instance
 }
