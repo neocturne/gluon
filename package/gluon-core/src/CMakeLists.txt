@@ -14,3 +14,8 @@ target_link_libraries(site gluonutil lua lua-jsonc)
 install(TARGETS site
   LIBRARY DESTINATION lib/lua/gluon
 )
+
+add_executable(gluon-uplink gluon-uplink.c)
+install(TARGETS gluon-uplink
+  LIBRARY DESTINATION bin
+)
